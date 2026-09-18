@@ -140,16 +140,15 @@ export async function gcPaylog(e) {
 export async function srPaylog(e) {
 	let user = new User(e);
 
-	let stoken = await gsCfg.getUserStoken(e.user_id);
-	let srData = Object.values(stoken || {}).find(item => item?.region?.startsWith('prod_'));
+	let srData = await resolveSrPayRole(e, user);
 	if (!srData) {
-		e.reply("未找到已绑定的星穹铁道账号，请先绑定stoken");
+		e.reply("未找到已绑定的星穹铁道账号，请确认已绑定stoken且该米游社账号下存在星铁角色");
 		return true;
 	}
 
 	await user.cookie(e);
-	e.uid = srData.uid;
-	e.region = srData.region;
+	e.uid = String(srData.uid);
+	e.region = srData.region || getSrServer(srData.uid);
 
 	let redis_Data = await redis.get(`xiaoyao:srPaylog:${e.user_id}`);
 	if (redis_Data) {
@@ -164,7 +163,7 @@ export async function srPaylog(e) {
 		return true;
 	}
 
-	let authkey = await getSrPayAuthKey(e, user);
+	let authkey = await getSrPayAuthKey(e, user, srData);
 	if (!authkey) {
 		return true;
 	}
@@ -205,16 +204,132 @@ export async function srPaylog(e) {
 	return true;
 }
 
-async function getSrPayAuthKey(e, user) {
-	let authkeyrow = await user.getData("authKey", {
-		auth_appid: "csc",
-		game_biz: "hkrpg_cn",
-		game_uid: e.uid,
-		region: e.region
-	}, false);
+async function resolveSrPayRole(e, user) {
+	let stoken = await gsCfg.getUserStoken(e.user_id);
+	let entries = Object.entries(stoken || {}).map(([key, value]) => ({
+		...(value || {}),
+		_tokenKey: key
+	})).filter(item => item?.stoken && item?.stuid);
+
+	if (entries.length === 0) return false;
+
+	let srData = entries.find(item => String(item?.region || '').startsWith('prod_'));
+	if (srData) {
+		return {
+			...srData,
+			uid: String(srData.uid || srData._tokenKey),
+			_tokenUid: String(srData.uid || srData._tokenKey)
+		};
+	}
+
+	let tokenData = entries[0];
+	let tokenUid = String(tokenData.uid || tokenData._tokenKey || '');
+
+	let srUid = e?.user?._games?.sr?.uid || await redis.get(`Yz:starrail:mys:qq-uid:${e.user_id}`);
+	if (srUid) {
+		let sameUid = entries.find(item => String(item.uid || item._tokenKey) === String(srUid));
+		let source = sameUid || tokenData;
+		return {
+			...source,
+			uid: String(srUid),
+			region: getSrServer(srUid),
+			_tokenUid: String(source.uid || source._tokenKey || tokenUid)
+		};
+	}
+
+	let oldUid = e.uid;
+	let oldRegion = e.region;
+	let oldCookie = e.cookie;
+	let oldCookies = e.cookies;
+	try {
+		e.uid = tokenUid;
+		e.region = getServer(tokenUid);
+
+		let cookies = `uid=${tokenData.stuid}&stoken=${tokenData.stoken}`;
+		if (tokenData?.mid) cookies += `&mid=${tokenData.mid}`;
+		let ckData = { cookies };
+		if (String(tokenUid)[0] > 5) ckData.method = 'post';
+
+		let ckRes = await user.getData("bbsGetCookie", ckData, false);
+		if (!ckRes?.data?.cookie_token) return false;
+
+		e.cookie = `ltoken=${tokenData.ltoken || ''};ltuid=${tokenData.stuid};cookie_token=${ckRes.data.cookie_token}; account_id=${tokenData.stuid};`;
+
+		let forum = user.getDataList?.("崩坏星穹铁道")?.[0];
+		if (!forum) return false;
+
+		let roleRes = await user.getData("userGameInfo", forum, false);
+		let roles = roleRes?.data?.list || [];
+		if (roles.length === 0) return false;
+
+		let knownUids = new Set(entries.map(item => String(item.uid || item._tokenKey || '')));
+		let role = roles.find(item => knownUids.has(String(item?.game_uid || ''))) || roles[0];
+		if (!role?.game_uid) return false;
+
+		return {
+			...tokenData,
+			uid: String(role.game_uid),
+			region: role.region || getSrServer(role.game_uid),
+			region_name: role.region_name,
+			_tokenUid: tokenUid
+		};
+	} catch (err) {
+		Bot.logger?.debug?.(`[星铁充值] 读取星铁角色失败：${err?.message || err}`);
+		return false;
+	} finally {
+		e.uid = oldUid;
+		e.region = oldRegion;
+		e.cookie = oldCookie;
+		e.cookies = oldCookies;
+	}
+}
+
+function getSrServer(uid) {
+	switch (String(uid).slice(0, -8)) {
+		case '1':
+		case '2':
+			return 'prod_gf_cn';
+		case '5':
+			return 'prod_qd_cn';
+		case '6':
+			return 'prod_official_usa';
+		case '7':
+			return 'prod_official_euro';
+		case '8':
+		case '18':
+			return 'prod_official_asia';
+		case '9':
+			return 'prod_official_cht';
+	}
+	return 'prod_gf_cn';
+}
+
+async function getSrPayAuthKey(e, user, srData = {}) {
+	let targetUid = String(srData.uid || e.uid);
+	let targetRegion = srData.region || e.region || getSrServer(targetUid);
+	let tokenUid = String(srData._tokenUid || targetUid);
+
+	let oldUid = e.uid;
+	let oldRegion = e.region;
+	let oldCookies = e.cookies;
+	let authkeyrow;
+	try {
+		e.uid = tokenUid;
+		e.region = getServer(tokenUid);
+		authkeyrow = await user.getData("authKey", {
+			auth_appid: "csc",
+			game_biz: "hkrpg_cn",
+			game_uid: targetUid,
+			region: targetRegion
+		}, false);
+	} finally {
+		e.uid = oldUid;
+		e.region = oldRegion;
+		e.cookies = oldCookies;
+	}
 
 	if (!authkeyrow?.data) {
-		e.reply(`uid:${e.uid},星铁authkey获取失败：` + (authkeyrow?.message?.includes("登录失效") ? "请重新绑定stoken" : authkeyrow?.message));
+		e.reply(`uid:${targetUid},星铁authkey获取失败：` + (authkeyrow?.message?.includes("登录失效") ? "请重新绑定stoken" : (authkeyrow?.message || "未知错误")));
 		return false;
 	}
 
