@@ -33,8 +33,7 @@ import {
 	userInfo,
 	gclog,
 	mytoken, gcPaylog, srPaylog,
-	bindStoken, bindLogin_ticket,
-	cloudToken
+	bindStoken, bindLogin_ticket
 } from "./user.js"
 import {
     rule as signRule,
@@ -43,13 +42,13 @@ import {
 } from "./sign.js"
 import {
 	rule as topupLoginRule,
-	qrCodeLogin,UserPassMsg,UserPassLogin,payOrder
+	qrCodeLogin,UserPassMsg,UserPassLogin
 } from './mhyTopUpLogin.js'
 export {
 	updateRes, updateTemp,
 	delSign, gcPaylog, srPaylog,delMapData,
 	qrCodeLogin,
-	seach, bindLogin_ticket,payOrder,
+	seach, bindLogin_ticket,
 	UserPassMsg,UserPassLogin,
 	gclog,
 	mytoken, getBasicVoide,
@@ -57,7 +56,6 @@ export {
 	updateMiaoPlugin,
 	userInfo,
 	versionInfo,
-	cloudToken,
 	Note_appoint,
 	pokeNote,
 	genShenMap,

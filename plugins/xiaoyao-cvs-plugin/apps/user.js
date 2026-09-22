@@ -1,7 +1,6 @@
 import utils from '../model/mys/utils.js';
 import {
-	Cfg,
-	Data
+	Cfg
 } from "../components/index.js";
 import moment from 'moment';
 import Common from "../components/Common.js";
@@ -9,8 +8,6 @@ import {
 	isV3
 } from '../components/Changelog.js';
 import gsCfg from '../model/gsCfg.js';
-import fs from "fs";
-import YAML from 'yaml'
 import User from "../model/user.js"
 
 export const rule = {
@@ -31,8 +28,8 @@ export const rule = {
 		describe: "刷新星穹铁道古老梦华记录"
 	},
 	mytoken: {
-		reg: "^#*我的(stoken|云ck)$",
-		describe: "查询绑定数据"
+		reg: "^#*我的stoken$",
+		describe: "查询绑定stoken"
 	},
 	bindStoken: {
 		reg: "^(.*)stoken=(.*)$",
@@ -42,13 +39,9 @@ export const rule = {
 		reg: "^(.*)login_ticket=(.*)$",
 		describe: "绑定ck自动获取sk"
 	},
-	cloudToken: {
-		reg: "^(.*)ct(.*)$",
-		describe: "云原神签到token获取"
-	},
 	delSign: {
-		reg: "^#*删除(我的)*((stoken|sk)|(云原神|云ck))$",
-		describe: "删除云原神、stoken数据"
+		reg: "^#*删除(我的)*(stoken|sk)$",
+		describe: "删除stoken数据"
 	},
 	updCookie: {
 		reg: "^#*(刷新|更新|获取)(ck|cookie)$",
@@ -57,7 +50,6 @@ export const rule = {
 }
 const _path = process.cwd();
 const YamlDataUrl = `${_path}/plugins/xiaoyao-cvs-plugin/data/yaml`;
-const yunpath = `${_path}/plugins/xiaoyao-cvs-plugin/data/yunToken/`;
 export async function userInfo(e, {
 	render
 }) {
@@ -403,19 +395,12 @@ export async function mytoken(e) {
 		return true;
 	}
 	let user = new User(e);
-	let msg = e.msg.replace(/#|我的/g, "");
-	let ck, sendMsg;
-	if (msg === "stoken") {
-		await user.getCookie(e)
-		ck = await user.getStoken(e.user_id)
-		sendMsg = `stuid=${ck.stuid};stoken=${ck.stoken};ltoken=${ck.ltoken};`;
-		if (ck?.mid) sendMsg += `mid=${ck?.mid};`
-	} else {
-		ck = await user.getyunToken(e);
-		sendMsg = `${ck.yuntoken}devId=${ck.devId}`
-	}
+	await user.getCookie(e)
+	let ck = await user.getStoken(e.user_id)
+	let sendMsg = `stuid=${ck.stuid};stoken=${ck.stoken};ltoken=${ck.ltoken};`;
+	if (ck?.mid) sendMsg += `mid=${ck?.mid};`
 	if (sendMsg.includes("undefined")) {
-		e.reply(`您暂未绑定${msg}`);
+		e.reply("您暂未绑定stoken");
 		return true;
 	}
 	e.reply(sendMsg)
@@ -472,47 +457,10 @@ export async function bindStoken(e, uid = '') {
 	await user.seachUid(res);
 	return true;
 }
-export async function cloudToken(e) {
-	if (e.msg.includes("ltoken") || e.msg.includes("_MHYUUID")) { //防止拦截米社cookie
-		return false;
-	}
-	if (["ct", "si", "devId"].includes(e.msg)) {
-		e.reply(`格式支持\nai=*;ci=*;oi=*;ct=***********;si=**************;bi=***********;devId=***********`)
-		return false;
-	}
-	let msg = e.msg.replace(/dev(i|l|I|L)d/g, 'devId').split("devId")
-	if (msg.length < 2) {
-		Bot.logger.mark(`云原神绑定失败：未包含devId字段~`)
-		return false;
-	}
-	let devId = msg[1].replace(/=/, "")
-	let user = new User(e);
-	let yuntoken = msg[0];
-	e.devId = devId;
-	e.yuntoken = yuntoken;
-	let res = await user.cloudSeach()
-	if (res.retcode != 0) {
-		e.reply(res.message)
-		return true;
-	}
-	let datalist = {
-		devId: devId,
-		yuntoken: yuntoken,
-		qq: e.user_id,
-		uid: e.uid,
-		sign: true
-	}
-	let yamlStr = YAML.stringify(datalist);
-	fs.writeFileSync(`${yunpath}${e.user_id}.yaml`, yamlStr, 'utf8');
-	e.reply("云原神cookie保存成功~\n您后续可发送【#云原神查询】获取使用时间~")
-	return true;
-}
-
 export async function delSign(e) {
 	let user = new User(e);
 	e.msg = e.msg.replace(/#|删除|我的/g, "");
-	let url = /sk|stoken/.test(e.msg) ? `${YamlDataUrl}` : `${yunpath}`;
-	await user.delSytk(url, e)
+	await user.delSytk(YamlDataUrl, e)
 	return true;
 }
 export async function updCookie(e) {

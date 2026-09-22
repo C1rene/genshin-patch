@@ -3,11 +3,11 @@ import moment from 'moment'
 
 export const rule = {
     seach: {
-        reg: `^#*(米游币|米币|云原神)查询$`,
-        describe: "米游币、云原神查询"
+        reg: `^#*(米游币|米币)查询$`,
+        describe: "米游币查询"
     },
     cookiesDocHelp: {
-        reg: "^#*(米游社|cookies|米游币|stoken|Stoken|云原神|云)(帮助|教程|绑定)$",
+        reg: "^#*(米游社|cookies|米游币|stoken|Stoken)(帮助|教程|绑定)$",
         describe: "cookies获取帮助"
     }
 }
@@ -21,12 +21,7 @@ export async function cookiesDocHelp(e) {
 export async function seach(e) {
     let user = new User(e)
     START = moment().unix()
-    let res
-    if (e.msg.includes('币')) {
-        res = await user.bbsSeachSign()
-    } else {
-        res = await user.cloudSeach()
-    }
+    let res = await user.bbsSeachSign()
     await replyMsg(e, res.message)
     return true
 }

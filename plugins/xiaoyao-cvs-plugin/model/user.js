@@ -17,33 +17,19 @@ const _path = process.cwd();
 const plugin = "xiaoyao-cvs-plugin"
 const nameData = ["原神", "崩坏3", "崩坏2", "未定事件簿"];
 const yamlDataUrl = `${_path}/plugins/xiaoyao-cvs-plugin/data/yaml`;
-const cloudDataUrl = `${_path}/plugins/xiaoyao-cvs-plugin/data/yunToken/`
 /** 配置文件 */
 export default class user {
     constructor(e) {
         this.e = e;
         this.stokenPath = `./plugins/${plugin}/data/yaml/`
-        this.yunPath = `./plugins/${plugin}/data/yunToken/`;
-        Data.createDir("", this.yunPath, false)
         this.ForumData = Data.readJSON(`${_path}/plugins/xiaoyao-cvs-plugin/defSet/json`, "mys")
         this.configSign = gsCfg.getfileYaml(`${_path}/plugins/xiaoyao-cvs-plugin/config/`, "config");
         this.configSign.signlist = this.configSign.signlist || "原神|崩坏3|崩坏2|未定事件簿".split("|")
         this.getToken = this.configSign.getToken || ''
-        this.getyunToken(this.e)
     }
 
     async getCkData() {
         let sumData = {};
-        let yunres = await this.cloudSeach();
-        let yundata = yunres.data
-        if (yunres.retcode === 0) {
-            sumData["云原神"] = {
-                "今日可获取": yundata?.coin?.free_coin_num,
-                "米云币": yundata?.coin?.coin_num,
-                "免费时长": yundata?.free_time?.free_time,
-                "总时长": yundata.total_time
-            }
-        }
         let mysres = await this.bbsSeachSign();
         if (mysres.retcode === 0) {
             sumData["米游社"] = {
@@ -195,23 +181,8 @@ export default class user {
         }
     }
 
-    async docHelp(type) {
-        return this.configSign[type.includes("云") ? "cloudDoc" : "cookiesDoc"]
-    }
-
-async cloudSeach() {
-        let res = await this.getData("cloudGet")
-        if (res?.retcode == -100) {
-            res.message = "云原神token失效/防沉迷"
-            res.isOk = false;
-        } else {
-            res.isOk = true;
-            if (res?.data?.total_time) {
-                res.message =
-                    `米云币:${res?.data?.coin?.coin_num},免费时长:${res?.data?.free_time?.free_time}分钟,总时长:${res?.data?.total_time}分钟`;
-            }
-        }
-        return res;
+    async docHelp() {
+        return this.configSign.cookiesDoc
     }
 
     async bbsSeachSign() {
@@ -370,19 +341,6 @@ async cloudSeach() {
             return ""
         }
         return ""
-    }
-
-    getyunToken(e) {
-        let file = `${this.yunPath}${e.user_id}.yaml`
-        try {
-            let ck = fs.readFileSync(file, 'utf-8')
-            ck = YAML.parse(ck)
-            this.e.devId = ck.devId;
-            this.e.yuntoken = ck.yuntoken;
-            return ck
-        } catch (error) {
-            return ""
-        }
     }
 
     async cookie(e) {
@@ -559,11 +517,8 @@ async cloudSeach() {
         }
     }
 
-    async delSytk(path = yamlDataUrl, e, type = "stoken") {
+    async delSytk(path = yamlDataUrl, e) {
         await this.getCookie(e);
-        if (type != "stoken") {
-            path = cloudDataUrl
-        }
         let file = `${path}/${e.user_id}.yaml`
         fs.exists(file, (exists) => {
             if (!exists) {
@@ -571,26 +526,24 @@ async cloudSeach() {
             }
             let ck = fs.readFileSync(file, 'utf-8')
             ck = YAML.parse(ck)
-            if (ck?.yuntoken) {
-                fs.unlinkSync(file);
-            } else if (ck) {
+            if (ck) {
                 if (!ck[e.uid]) {
                     return true;
                 }
-                let sk=ck[e.uid]
-                lodash.forEach(ck,(v,i)=>{
-                    if(sk?.stoken===v?.stoken){
+                let sk = ck[e.uid]
+                lodash.forEach(ck, (v, i) => {
+                    if (sk?.stoken === v?.stoken) {
                         delete ck[i];
                     }
                 })
-                if (Object.keys(ck) == 0) {
+                if (Object.keys(ck).length === 0) {
                     fs.unlinkSync(file);
                 } else {
                     ck = YAML.stringify(ck)
                     fs.writeFileSync(file, ck, 'utf8')
                 }
             }
-            e.reply(`已删除${/米游社|mys|米币|米游币|sk|stoken/.test(e.msg)?'stoken':'云原神token'}`)
+            e.reply('已删除stoken')
             return true;
         })
     }

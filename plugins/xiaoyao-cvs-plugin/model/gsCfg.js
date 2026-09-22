@@ -10,7 +10,7 @@ import {
 const plugin = "xiaoyao-cvs-plugin"
 /**
  * 配置文件
- * 主要用于处理 stoken以及云原神账号数据
+ * 主要用于处理 stoken 账号数据
  */
 const _path = process.cwd();
 class GsCfg {
