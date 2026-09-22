@@ -1,2 +1,4 @@
-# starrail-paylog
-星铁充值记录获取工具，需要配合xiaoyao-cvs-plugin使用，下载文件后直接粘贴覆盖即可
+# genshin-patch
+增加星铁充值记录获取工具，拆分社区与游戏签到权限，添加验证码打码次数统计
+需要配合xiaoyao-cvs-plugin使用，已移除相关签到功能
+下载文件后直接粘贴覆盖即可
