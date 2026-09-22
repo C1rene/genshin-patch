@@ -1,5 +1,5 @@
 #插件优先级
-priority: 50
+priority: 100
 
 #是否自动签到
 AutoSign: true
