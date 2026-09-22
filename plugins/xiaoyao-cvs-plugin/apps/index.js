@@ -37,13 +37,9 @@ import {
 	cloudToken
 } from "./user.js"
 import {
-	rule as signRule,
-	sign,
-	bbsSign,
-	cloudSign,
-	seach,
-	cookiesDocHelp,
-	signTask
+    rule as signRule,
+    seach,
+    cookiesDocHelp
 } from "./sign.js"
 import {
 	rule as topupLoginRule,
@@ -52,19 +48,17 @@ import {
 export {
 	updateRes, updateTemp,
 	delSign, gcPaylog, srPaylog,delMapData,
-	cloudSign,qrCodeLogin,
+	qrCodeLogin,
 	seach, bindLogin_ticket,payOrder,
-	bbsSign,UserPassMsg,UserPassLogin,
+	UserPassMsg,UserPassLogin,
 	gclog,
 	mytoken, getBasicVoide,
 	bindStoken,
 	updateMiaoPlugin,
 	userInfo,
-	sign,
 	versionInfo,
 	cloudToken,
 	Note_appoint,
-	signTask,
 	pokeNote,
 	genShenMap,
 	cookiesDocHelp,
@@ -131,30 +125,14 @@ lodash.forEach(rule, (r) => {
 });
 task();
 async function task() {
-	if (typeof test != "undefined") return;
-	let set = gsCfg.getfileYaml(`${_path}/plugins/xiaoyao-cvs-plugin/config/`, "config")
-	schedule.scheduleJob(set.mysBbsTime, function () {
-		if (set.ismysSign) {
-			signTask('bbs')
-		}
-	});
-	schedule.scheduleJob(set.allSignTime, function () {
-		if (set.isSign) {
-			signTask('mys')
-		}
-	});
-	schedule.scheduleJob(set.cloudSignTime, function () {
-		if (set.isCloudSign) {
-			signTask('cloud')
-		}
-	});
-	schedule.scheduleJob(set.noteTask, function () {
-		if (set.isNoteTask) {
-			DailyNoteTask()
-		}
-	});
+    if (typeof test != "undefined") return;
+    let set = gsCfg.getfileYaml(`${_path}/plugins/xiaoyao-cvs-plugin/config/`, "config")
+    schedule.scheduleJob(set.noteTask, function () {
+        if (set.isNoteTask) {
+            DailyNoteTask()
+        }
+    });
 }
-
 
 export {
 	rule
