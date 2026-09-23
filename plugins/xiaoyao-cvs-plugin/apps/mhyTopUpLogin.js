@@ -11,7 +11,7 @@ import {
 const _path = process.cwd();
 export const rule = {
 	qrCodeLogin: {
-		reg: `^#(扫码|二维码|辅助)(登录|绑定|登陆)$`,
+		reg: `^(?:[#*%]|#(?:原神|星铁|绝区零))(扫码|二维码|辅助)(登录|绑定|登陆)$`,
 		describe: "扫码登录"
 	},
 	UserPassMsg: {
@@ -41,7 +41,7 @@ export async function qrCodeLogin(e, { render }) {
 	let res = await Mys.qrCodeLogin()
 	if (!res?.data) return false;
 	e._reply = e.reply
-	let sendMsg = [segment.at(e.user_id), '\n请扫码以完成绑定\n']
+	let sendMsg = [segment.at(e.user_id), '请扫码以完成绑定\n']
 	e.reply = (msg) => {
 		sendMsg.push(msg)
 	}
@@ -53,9 +53,26 @@ export async function qrCodeLogin(e, { render }) {
 		scale: 1.2, retMsgId: true
 	})
 	let r = await e._reply(sendMsg)
-	utils.recallMsg(e, r, 30) //默认30，有需要请自行修改
+	let qrRecalled = false
+	const recallQrMessage = async () => {
+		if (qrRecalled || !r?.message_id) return
+		qrRecalled = true
+		try {
+			if (e?.group?.recallMsg) {
+				await e.group.recallMsg(r.message_id)
+			} else if (e?.friend?.recallMsg) {
+				await e.friend.recallMsg(r.message_id)
+			}
+		} catch (err) {
+			Bot.logger.debug(`[扫码登录] 二维码消息撤回失败: ${err}`)
+		}
+	}
+	const qrRecallTimer = setTimeout(() => recallQrMessage(), 90 * 1000) // 最迟90秒自动撤回
 	e.reply = e._reply
-	res = await Mys.GetQrCode(res.data.ticket)
+	res = await Mys.GetQrCode(res.data.ticket, async () => {
+		clearTimeout(qrRecallTimer)
+		await recallQrMessage() // 监听到已扫描后立即撤回二维码
+	})
 	if (!res) return true;
 	await bindSkCK(e, res)
 	return true;
