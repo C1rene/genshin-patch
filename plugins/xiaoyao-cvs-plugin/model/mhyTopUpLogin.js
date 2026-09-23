@@ -29,28 +29,45 @@ export default class mysTopLogin {
         res.data["ticket"] = res.data["ticket"] || res?.data?.url.split("ticket=")[1]
         return res
     }
-    async GetQrCode(ticket) {
+    async GetQrCode(ticket, onScanned) {
         await utils.redisSet(this.e.user_id, "GetQrCode", { GetQrCode: 1 }, 60 * 5) //设置5分钟缓存避免重复触发
         let res;
         let RedisData = await utils.redisGet(this.e.user_id, "GetQrCode")
+        let hasScanned = false
+        let confirmed = false
         for (let n = 1; n < 60; n++) {
             await utils.sleepAsync(5000)
             res = await this.user.getData("qrCodeQuery", {
                 device: this.device, ticket
             },false)
-            if (res?.data?.status == "Scanned" && RedisData.GetQrCode == 1) {
-                Bot.logger.mark(JSON.stringify(res))
-                await this.e.reply("二维码已扫描，请确认登录", true)
-                RedisData.GetQrCode++;
+            if (res?.data?.status == "Scanned") {
+                hasScanned = true
+                if (RedisData.GetQrCode == 1) {
+                    Bot.logger.mark(JSON.stringify(res))
+                    if (typeof onScanned === "function") {
+                        await onScanned()
+                    }
+                    await this.e.reply("二维码已扫描，请确认登录", true)
+                    RedisData.GetQrCode++;
+                }
             }
             if (res?.data?.status == "Confirmed") {
+                confirmed = true
                 Bot.logger.mark(JSON.stringify(res))
+                break
+            }
+            // 100秒内仍未扫码则直接结束验证；已扫码则继续等待确认
+            if (n >= 20 && !hasScanned) {
                 break
             }
         }
         await utils.redisDel(this.e.user_id, 'GetQrCode')
-        if (!res?.data?.tokens&&!res?.data?.user_info) {
+        if (!confirmed) {
             await this.e.reply("验证超时", true)
+            return false
+        }
+        if (!res?.data?.user_info || !Array.isArray(res?.data?.tokens) || res.data.tokens.length === 0) {
+            await this.e.reply("stoken获取不完整请重新扫码", true)
             return false
         }
         const uid = res.data.user_info.aid || res.data.user_info.uid || res.data.user_info.account_id
