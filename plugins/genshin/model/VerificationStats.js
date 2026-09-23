@@ -94,7 +94,7 @@ function write(data) {
 
 function nicknameFromEvent(e, qq) {
   if (!e || cleanQQ(e.user_id) !== cleanQQ(qq)) return ''
-  return cleanNickname(e?.sender?.card || e?.sender?.nickname || e?.nickname || '')
+  return cleanNickname(e?.sender?.nickname || e?.nickname || '')
 }
 
 function nicknameFromBot(qq, e) {
@@ -102,27 +102,15 @@ function nicknameFromBot(qq, e) {
   try {
     if (typeof Bot === 'undefined') return ''
 
-    if (e?.group_id) {
-      let member
-      if (Array.isArray(Bot.uin)) {
-        const bot = Bot[e.self_id] || Bot[String(e.self_id)]
-        member = bot?.pickMember?.(e.group_id, userId)
-      } else {
-        member = Bot.pickMember?.(e.group_id, userId)
-      }
-      const name = cleanNickname(member?.card || member?.nickname)
-      if (name) return name
-    }
-
     if (Array.isArray(Bot.uin)) {
       for (const botId of Bot.uin) {
         const friend = Bot[botId]?.pickFriend?.(userId)
-        const name = cleanNickname(friend?.nickname || friend?.card)
+        const name = cleanNickname(friend?.nickname)
         if (name) return name
       }
     } else {
       const friend = Bot.pickFriend?.(userId)
-      const name = cleanNickname(friend?.nickname || friend?.card)
+      const name = cleanNickname(friend?.nickname)
       if (name) return name
     }
   } catch (error) {

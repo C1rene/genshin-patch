@@ -1,28 +1,36 @@
-const activeQQ = new Set()
+const activeQQ = {
+  game: new Set(),
+  coin: new Set()
+}
 
 function key(qq) {
   return String(qq ?? '').trim()
 }
 
-export function isBusy(qq) {
-  qq = key(qq)
-  return qq ? activeQQ.has(qq) : false
+function getQueue(type) {
+  return activeQQ[type === 'coin' ? 'coin' : 'game']
 }
 
-export function tryAcquire(qq) {
+export function isBusy(qq, type = 'game') {
   qq = key(qq)
-  if (!qq || activeQQ.has(qq)) return false
-  activeQQ.add(qq)
+  return qq ? getQueue(type).has(qq) : false
+}
+
+export function tryAcquire(qq, type = 'game') {
+  qq = key(qq)
+  let queue = getQueue(type)
+  if (!qq || queue.has(qq)) return false
+  queue.add(qq)
   return true
 }
 
-export function release(qq) {
+export function release(qq, type = 'game') {
   qq = key(qq)
-  if (qq) activeQQ.delete(qq)
+  if (qq) getQueue(type).delete(qq)
 }
 
-export function releaseMany(qqs) {
-  for (let qq of qqs || []) release(qq)
+export function releaseMany(qqs, type = 'game') {
+  for (let qq of qqs || []) release(qq, type)
 }
 
 export default {

@@ -10,6 +10,7 @@ import User from './user.js'
 import MysInfo from './mys/mysInfo.js'
 import VerificationStats from './VerificationStats.js'
 import SignQueue from './SignQueue.js'
+import GameSignCache from './GameSignCache.js'
 
 let signing = false
 let finishTime
@@ -33,6 +34,8 @@ export default class MysSign extends base {
             { text: '#刷新ck', callback: '#刷新ck' }
         ])], false, { at: true })
 
+        if (GameSignCache.isAllSigned(e.user_id, uids, mysSign.set.game))
+            return e.reply('已完成全部签到')
 
         e.reply(`签到中...`, false, { at: true, recallMsg: mysSign.set.recall })
 
@@ -63,6 +66,8 @@ export default class MysSign extends base {
                         res = await this.doSign(ck, uid, g, name, verificationUser)
                         retry++
                     }
+
+                GameSignCache.setStatus(ck?.qq || this.e.user_id, g, uid, res?.retcode === 0)
 
                 if (res) {
                     let status = 'failed'
@@ -139,10 +144,20 @@ export default class MysSign extends base {
     }
 
     async doSign(ck, uid, game, name, verificationUser = {}) {
-        this.mysApi = new MysApi(uid, ck.ck, { device: ck.device_id }, ck.region, ck.game_biz, game)
         this.key = `${game}:Sign:${uid}`
+        this.log = `[${name}uid:${uid}][qq:${_.padEnd(ck?.qq || '', 10, ' ')}]`
 
-        this.log = `[${name}uid:${uid}][qq:${_.padEnd(ck.qq, 10, ' ')}]`
+        // 定时任务中若数据库里出现不完整 CK，不能让单个账号中断整轮签到任务。
+        if (!ck?.ck) {
+            logger.error(`[${name}签到失败]${this.log} 未获取到可用cookie`)
+            return {
+                retcode: -100,
+                msg: `\n签到失败，未获取到可用cookie\n可【#刷新ck】`,
+                is_invalid: true
+            }
+        }
+
+        this.mysApi = new MysApi(uid, ck.ck, { device: ck.device_id }, ck.region, ck.game_biz, game)
 
         let isSigned = await redis.get(this.key)
         if (isSigned) {
@@ -158,20 +173,32 @@ export default class MysSign extends base {
         await common.sleep(2000)
         let signInfo = await this.mysApi.getData('sign_info')
 
-        if (!signInfo) return false
+        if (!signInfo) {
+            logger.error(`[${name}签到失败]${this.log} 签到状态接口无返回`)
+            return {
+                retcode: -1,
+                msg: `\n签到失败：签到状态接口无返回`
+            }
+        }
 
         if (signInfo.retcode !== 0 && signInfo.message?.includes('登录')) {
             this.e.AutoupCookie = true
             await this.upCookie(ck.qq)
             if (!this.e.EmptyStoken) {
-                let cookie = await MysInfo.checkUidBing(uid, game)
-                cookie = cookie.ck
+                const cookieInfo = await MysInfo.checkUidBing(uid, game)
 
-                this.mysApi = new MysApi(uid, cookie, { device: ck.device_id }, ck.region, ck.game_biz, game)
-                signInfo = await this.mysApi.getData('sign_info')
+                // 有 stoken 不代表刷新 CK 一定成功。刷新失败时 checkUidBing 会返回 false；
+                // 原代码继续读取 cookieInfo.ck，最终把 undefined 传给 MysApi，导致 getData 中 .match 崩溃。
+                if (cookieInfo?.ck) {
+                    this.mysApi = new MysApi(uid, cookieInfo.ck, { device: ck.device_id }, ck.region, ck.game_biz, game)
+                    const refreshedSignInfo = await this.mysApi.getData('sign_info')
+                    if (refreshedSignInfo) signInfo = refreshedSignInfo
+                } else {
+                    logger.error(`[${name}签到失败]${this.log} 自动刷新cookie后未获取到可用绑定cookie`)
+                }
             }
 
-            if (signInfo.retcode !== 0 && signInfo.message?.includes('登录')) {
+            if (signInfo?.retcode !== 0 && signInfo?.message?.includes('登录')) {
                 logger.error(`[${name}签到失败]${this.log} 绑定cookie已失效`)
                 if (this.set.Autodelck)
                     await Cfg.delck(ck.ltuid, ck.qq)
@@ -384,14 +411,14 @@ export default class MysSign extends base {
 
         let { cks, uids } = await Cfg.signCk(targetQQs)
 
-        // 自动/主人批量任务也按 QQ 使用同一把签到锁，避免与该 QQ 的手动签到并发。
+        // 自动/主人批量游戏签到按 QQ 使用游戏签到锁，仅与同 QQ 的其他游戏签到互斥。
         let taskLocks = new Set()
         let busyQQs = new Set()
         for (let game of this.set.game) {
             for (let uid of uids[game]) {
                 let qq = String(cks[game]?.[uid]?.qq ?? '')
                 if (!qq || taskLocks.has(qq) || busyQQs.has(qq)) continue
-                if (SignQueue.tryAcquire(qq)) taskLocks.add(qq)
+                if (SignQueue.tryAcquire(qq, 'game')) taskLocks.add(qq)
                 else busyQQs.add(qq)
             }
         }
@@ -408,10 +435,10 @@ export default class MysSign extends base {
         for (let game of this.set.game)
             length += uids[game].length
 
-        let { noSignNum } = await this.getsignNum(uids, length)
+        let { noSignNum } = await this.getsignNum(uids, length, cks)
 
         if (noSignNum <= 0 || length <= 0) {
-            SignQueue.releaseMany(taskLocks)
+            SignQueue.releaseMany(taskLocks, 'game')
             if (manual) await this.e.reply(busyQQs.size > 0 ? '前置签到正在执行中' : '暂无ck需要签到')
             return
         }
@@ -479,6 +506,8 @@ export default class MysSign extends base {
                         retry++
                     }
 
+                GameSignCache.setStatus(ck?.qq, g, uid, ret?.retcode === 0)
+
                 if (ret.retcode === 0) {
                     if (ret.is_sign) finshNum[g]++
                     else sucNum[g]++
@@ -515,11 +544,11 @@ export default class MysSign extends base {
             return line
         })
 
-        await this.send(manual, msg)
+        await this.send(manual, msg.trimEnd())
         } finally {
             signing = false
             Nosign = 0
-            SignQueue.releaseMany(taskLocks)
+            SignQueue.releaseMany(taskLocks, 'game')
         }
     }
 
@@ -544,11 +573,15 @@ export default class MysSign extends base {
         }
     }
 
-    async getsignNum(uids, length) {
+    async getsignNum(uids, length, cks = null) {
         let signNum = 0
         for (let g of this.set.game)
             for (let i of uids[g])
-                if (await redis.get(`${g}:Sign:${i}`)) signNum++
+                if (await redis.get(`${g}:Sign:${i}`)) {
+                    signNum++
+                    let qq = cks?.[g]?.[i]?.qq
+                    if (qq) GameSignCache.setStatus(qq, g, i, true)
+                }
 
         let noSignNum = length - signNum
 

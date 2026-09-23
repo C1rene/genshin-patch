@@ -5,6 +5,7 @@ import MysSign from '../model/sign.js'
 import Cfg from '../model/Cfg.js'
 import SignPermission from '../model/SignPermission.js'
 import SignQueue from '../model/SignQueue.js'
+import SignTaskState from '../model/SignTaskState.js'
 import moment from 'moment'
 
 let START
@@ -67,7 +68,13 @@ export class sign extends plugin {
         e = fromCron ? {} : (e || this.e)
         let manual = !fromCron
         let targetQQs = manual ? await SignPermission.getMasterTargets(e, 'game') : null
-        await new MysSign(e).signTask(manual, targetQQs)
+
+        if (fromCron) SignTaskState.begin('game')
+        try {
+            await new MysSign(e).signTask(manual, targetQQs)
+        } finally {
+            if (fromCron) SignTaskState.end('game')
+        }
         return
     }
 
@@ -75,7 +82,13 @@ export class sign extends plugin {
         e = fromCron ? {} : (e || this.e)
         let manual = !fromCron
         let targetQQs = manual ? await SignPermission.getMasterTargets(e, 'coin') : null
-        await new BBsSign(e).bbsTask(manual, targetQQs)
+
+        if (fromCron) SignTaskState.begin('coin')
+        try {
+            await new BBsSign(e).bbsTask(manual, targetQQs)
+        } finally {
+            if (fromCron) SignTaskState.end('coin')
+        }
         return
     }
 
@@ -107,20 +120,20 @@ export class sign extends plugin {
 
     async sign(e) {
         if (!await this.checkAccess(e, 'game')) return
-        if (!SignQueue.tryAcquire(e.user_id))
+        if (!SignQueue.tryAcquire(e.user_id, 'game'))
             return e.reply('前置签到正在执行中')
 
         try {
             await MysSign.sign(e)
         } finally {
-            SignQueue.release(e.user_id)
+            SignQueue.release(e.user_id, 'game')
         }
         return
     }
 
     async coinSign(e) {
         if (!await this.checkAccess(e, 'coin')) return
-        if (!SignQueue.tryAcquire(e.user_id))
+        if (!SignQueue.tryAcquire(e.user_id, 'coin'))
             return e.reply('前置签到正在执行中')
 
         try {
@@ -132,14 +145,14 @@ export class sign extends plugin {
 
             await e.reply(success ? '米币签到完成' : '米币签到失败')
         } finally {
-            SignQueue.release(e.user_id)
+            SignQueue.release(e.user_id, 'coin')
         }
         return
     }
 
     async bbsSign(e) {
         if (!await this.checkAccess(e, 'coin')) return
-        if (!SignQueue.tryAcquire(e.user_id))
+        if (!SignQueue.tryAcquire(e.user_id, 'coin'))
             return e.reply('前置签到正在执行中')
 
         try {
@@ -156,7 +169,7 @@ export class sign extends plugin {
 
             await this.replyMsg(e, send)
         } finally {
-            SignQueue.release(e.user_id)
+            SignQueue.release(e.user_id, 'coin')
         }
         return
     }
@@ -176,6 +189,11 @@ export class sign extends plugin {
         let permission = await SignPermission.getPermission(e.user_id)
         if (!SignPermission.hasLevel(permission, level)) {
             await e.reply('暂无签到权限')
+            return false
+        }
+
+        if (SignTaskState.isRunning(level)) {
+            await e.reply('自动签到任务执行中，禁止手动签到')
             return false
         }
 

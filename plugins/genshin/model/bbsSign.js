@@ -187,7 +187,7 @@ export default class BBsSign extends base {
         let verificationUser = VerificationStats.context(e, e?.user_id)
 
         for (let qq of [...new Set(targetQQs.map(v => String(v)))]) {
-            if (!SignQueue.tryAcquire(qq)) {
+            if (!SignQueue.tryAcquire(qq, 'coin')) {
                 results.push({ qq, message: '前置签到正在执行中' })
                 continue
             }
@@ -210,7 +210,7 @@ export default class BBsSign extends base {
 
                 results.push({ qq, message: messages.filter(Boolean).join('\n') })
             } finally {
-                SignQueue.release(qq)
+                SignQueue.release(qq, 'coin')
             }
         }
 
@@ -416,7 +416,7 @@ export default class BBsSign extends base {
             return
         }
 
-        // 自动/主人批量任务按 QQ 使用共享签到锁。同一 QQ 有多个 stoken 时只获取一次锁。
+        // 自动/主人批量米币与社区任务按 QQ 使用米币/社区签到锁。同一 QQ 有多个 stoken 时只获取一次锁。
         let taskLocks = new Set()
         let busyQQs = new Set()
         pending = pending.filter(item => {
@@ -424,7 +424,7 @@ export default class BBsSign extends base {
             if (!qq) return false
             if (taskLocks.has(qq)) return true
             if (busyQQs.has(qq)) return false
-            if (SignQueue.tryAcquire(qq)) {
+            if (SignQueue.tryAcquire(qq, 'coin')) {
                 taskLocks.add(qq)
                 return true
             }
@@ -436,7 +436,7 @@ export default class BBsSign extends base {
             logger.mark(`[签到队列]米币任务跳过正在执行前置签到的QQ：${[...busyQQs].join(',')}`)
 
         if (pending.length <= 0) {
-            SignQueue.releaseMany(taskLocks)
+            SignQueue.releaseMany(taskLocks, 'coin')
             if (manual) await this.e.reply('前置签到正在执行中')
             return
         }
@@ -513,7 +513,7 @@ export default class BBsSign extends base {
         } finally {
             signing = false
             Nosign = 0
-            SignQueue.releaseMany(taskLocks)
+            SignQueue.releaseMany(taskLocks, 'coin')
         }
     }
 
