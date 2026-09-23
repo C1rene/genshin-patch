@@ -3,4 +3,4 @@
 
 需要配合xiaoyao-cvs-plugin使用，已移除相关签到功能
 
-下载文件后直接粘贴覆盖即可
+下载文件后直接粘贴覆盖即可，从https://github.com/kissnavel/genshin/覆盖
